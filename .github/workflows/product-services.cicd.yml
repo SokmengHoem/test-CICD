@@ -103,7 +103,7 @@ jobs:
             yarn install --production
 
             # Debug: List files after installation
-            ls -la /home/ubuntu/apps/build
+            ls -la 
 
             # Check if the PM2 process is running
             if pm2 show auth > /dev/null; then
