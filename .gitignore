@@ -1,0 +1,14 @@
+
+#node_modules
+node_modules
+
+build/
+
+yarn.lock
+
+scripts
+
+#env
+.env.development
+.env.testing
+.env.production

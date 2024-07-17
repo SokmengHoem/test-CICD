@@ -1,0 +1,115 @@
+name: CI/CD Pipeline for Service
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: . 
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: yarn install
+
+      - name: Run build
+        run: yarn build
+
+      - name: List build directory contents
+        run: ls -la ./build
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: ./build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build
+          path: ./build 
+
+      - name: List downloaded artifacts
+        run: ls -la ./build
+
+      - name: Prepare Deployment Directories
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            mkdir -p /home/ubuntu/apps/build
+            mkdir -p /home/ubuntu/apps/build/configs
+
+      - name: Copy files to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "./build/*"
+          target: "/home/ubuntu/apps/build"
+          strip_components: 1
+
+      - name: Create .env File
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            echo "NODE_ENV=production" > /home/ubuntu/apps/build/configs/.env.production
+            echo "PORT=${{secrets.PORT}}" >> /home/ubuntu/apps/build/configs/.env.production
+            echo "MONGODB_URL=${{secrets.MONGODB_URL}}" >> /home/ubuntu/apps/build/configs/.env.production
+
+      - name: Install Dependencies and Restart Application
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            source /home/ubuntu/.nvm/nvm.sh
+            source /home/ubuntu/.profile
+
+            cd /home/ubuntu/apps/build
+            yarn install --production
+
+            # Debug: List files after installation
+            ls -la /home/ubuntu/apps/build
+
+            # Check if the PM2 process is running
+            if pm2 show auth > /dev/null; then
+              echo "Application is running. Restarting..."
+              pm2 restart auth
+            else
+              echo "Application is not running. Starting..."
+              pm2 start yarn --name auth -- start
+            fi
