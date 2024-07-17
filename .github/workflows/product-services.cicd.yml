@@ -106,10 +106,10 @@ jobs:
             ls -la 
 
             # Check if the PM2 process is running
-            if pm2 show product-service > /dev/null; then
+            if pm2 show auth > /dev/null; then
               echo "Application is running. Restarting..."
-              pm2 restart product-service
+              pm2 restart auth
             else
               echo "Application is not running. Starting..."
-              pm2 start yarn --name product-service -- start
+              pm2 start yarn --name auth -- start
             fi
